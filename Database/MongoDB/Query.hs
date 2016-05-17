@@ -73,8 +73,6 @@ import Control.Monad.Trans.Control (MonadBaseControl(..))
 import Data.Bson (Document, Field(..), Label, Val, Value(String, Doc, Bool),
                   Javascript, at, valueAt, lookup, look, genObjectId, (=:),
                   (=?))
-import Data.Text (Text)
-import qualified Data.Text as T
 
 import Database.MongoDB.Internal.Protocol (Reply(..), QueryOption(..),
                                            ResponseFlag(..), InsertOption(..),
@@ -201,7 +199,7 @@ liftDB m = do
 
 -- * Database
 
-type Database = Text
+type Database = BS.ByteString
 
 allDatabases :: (MonadIO m) => Action m [Database]
 -- ^ List all databases residing on server
@@ -221,7 +219,7 @@ auth :: MonadIO m => Username -> Password -> Action m Bool
 -- ^ Authenticate with the current database (if server is running in secure mode). Return whether authentication was successful or not. Reauthentication is required for every new pipe. SCRAM-SHA-1 will be used for server versions 3.0+, MONGO-CR for lower versions.
 auth un pw = do
     let serverVersion = liftM (at "version") $ useDb "admin" $ runCommand ["buildinfo" =: (1 :: Int)]
-    mmv <- liftM (readMaybe . T.unpack . head . T.splitOn ".") $ serverVersion
+    mmv <- liftM (readMaybe . B.unpack . head . B.split '.') $ serverVersion
     maybe (return False) performAuth mmv
     where
     performAuth majorVersion =
@@ -240,7 +238,7 @@ authSCRAMSHA1 :: MonadIO m => Username -> Password -> Action m Bool
 authSCRAMSHA1 un pw = do
     let hmac = HMAC.hmac SHA1.hash 64
     nonce <- (Nonce.new >>= Nonce.nonce128 >>= return . B64.encode)
-    let firstBare = B.concat [B.pack $ "n=" ++ (T.unpack un) ++ ",r=", nonce]
+    let firstBare = B.concat [B.pack $ "n=" ++ (B.unpack un) ++ ",r=", nonce]
     let client1 = ["saslStart" =: (1 :: Int), "mechanism" =: ("SCRAM-SHA-1" :: String), "payload" =: (B.unpack . B64.encode $ B.concat [B.pack "n,,", firstBare]), "autoAuthorize" =: (1 :: Int)]
     server1 <- runCommand client1
 
@@ -253,7 +251,7 @@ authSCRAMSHA1 un pw = do
 
         shortcircuit (B.isInfixOf nonce snonce) $ do
             let withoutProof = B.concat [B.pack "c=biws,r=", snonce]
-            let digestS = B.pack $ T.unpack un ++ ":mongo:" ++ T.unpack pw
+            let digestS = B.pack $ B.unpack un ++ ":mongo:" ++ B.unpack pw
             let digest = B16.encode $ MD5.hash digestS
             let saltedPass = scramHI digest salt iterations
             let clientKey = hmac saltedPass (B.pack "Client Key")
@@ -293,12 +291,12 @@ scramHI digest salt iters = snd $ foldl com (u1, u1) [1..(iters-1)]
     com (u,uc) _ = let u' = hmacd u in (u', BS.pack $ BS.zipWith xor uc u')
 
 parseSCRAM :: B.ByteString -> Map.Map B.ByteString B.ByteString
-parseSCRAM = Map.fromList . fmap cleanup . (fmap $ T.breakOn "=") . T.splitOn "," . T.pack . B.unpack
-    where cleanup (t1, t2) = (B.pack $ T.unpack t1, B.pack . T.unpack $ T.drop 1 t2)
+parseSCRAM = Map.fromList . fmap cleanup . (fmap $ B.break (== '=')) . B.split ','
+    where cleanup (t1, t2) = (t1, B.drop 1 t2)
 
 -- * Collection
 
-type Collection = Text
+type Collection = BS.ByteString
 -- ^ Collection name (not prefixed with database)
 
 allCollections :: (MonadIO m, MonadBaseControl IO m) => Action m [Collection]
@@ -308,8 +306,8 @@ allCollections = do
     docs <- rest =<< find (query [] "system.namespaces") {sort = ["name" =: (1 :: Int)]}
     return . filter (not . isSpecial db) . map dropDbPrefix $ map (at "name") docs
  where
-    dropDbPrefix = T.tail . T.dropWhile (/= '.')
-    isSpecial db col = T.any (== '$') col && db <.> col /= "local.oplog.$main"
+    dropDbPrefix = B.tail . B.dropWhile (/= '.')
+    isSpecial db col = B.any (== '$') col && db <.> col /= "local.oplog.$main"
 
 -- * Selection
 
@@ -877,7 +875,7 @@ runCommand :: (MonadIO m) => Command -> Action m Document
 runCommand c = maybe err id `liftM` findOne (query c "$cmd") where
     err = error $ "Nothing returned for command: " ++ show c
 
-runCommand1 :: (MonadIO m) => Text -> Action m Document
+runCommand1 :: (MonadIO m) => BS.ByteString -> Action m Document
 -- ^ @runCommand1 foo = runCommand [foo =: 1]@
 runCommand1 c = runCommand [c =: (1 :: Int)]
 

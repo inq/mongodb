@@ -28,7 +28,6 @@ Library
                     , base <5
                     , binary -any
                     , bson >= 0.3 && < 0.4
-                    , text
                     , bytestring -any
                     , containers -any
                     , mtl >= 2
@@ -67,6 +66,7 @@ test-suite test
   type: exitcode-stdio-1.0
   build-depends:   mongoDB
                  , base
+                 , bytestring -any
                  , mtl
                  , hspec >= 2
                  -- Keep supporting the old-locale and time < 1.5 packages for

@@ -5,7 +5,7 @@ module QuerySpec (spec) where
 import TestImport
 import Control.Exception
 
-import qualified Data.Text as T
+import qualified Data.ByteString.Char8 as B
 
 testDBName :: Database
 testDBName = "mongodb-haskell-test"
@@ -127,7 +127,7 @@ spec = around withCleanDatabase $ do
   describe "insertAll_" $ do
     it "inserts documents and receives 100 000 of them" $ do
       let docs = (flip map) [0..200000] $ \i ->
-              ["name" =: (T.pack $ "name " ++ (show i))]
+              ["name" =: (B.pack $ "name " ++ (show i))]
       db $ insertAll_ "bigCollection" docs
       db $ do
         cur <- find $ (select [] "bigCollection") {limit = 100000, batchSize = 100000}
@@ -138,7 +138,7 @@ spec = around withCleanDatabase $ do
   describe "rest" $ do
     it "returns all documents from the collection" $ do
       let docs = (flip map) [0..6000] $ \i ->
-              ["name" =: (T.pack $ "name " ++ (show i))]
+              ["name" =: (B.pack $ "name " ++ (show i))]
           collectionName = "smallCollection"
       db $ insertAll_ collectionName docs
       db $ do

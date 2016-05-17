@@ -37,10 +37,9 @@ import Control.Monad.Error (throwError)
 import Control.Concurrent.MVar.Lifted (MVar, newMVar, withMVar, modifyMVar,
                                        readMVar)
 import Data.Bson (Document, at, (=:))
-import Data.Text (Text)
 
+import qualified Data.ByteString.Char8 as SC
 import qualified Data.Bson as B
-import qualified Data.Text as T
 
 import Database.MongoDB.Internal.Protocol (Pipe, newPipe, close, isClosed)
 import Database.MongoDB.Internal.Util (untilSuccess, liftIOE,
@@ -117,12 +116,12 @@ connect' timeoutSecs (Host hostname port) = do
 
 -- * Replica Set
 
-type ReplicaSetName = Text
+type ReplicaSetName = SC.ByteString
 
 -- | Maintains a connection (created on demand) to each server in the named replica set
 data ReplicaSet = ReplicaSet ReplicaSetName (MVar [(Host, Maybe Pipe)]) Secs
 
-replSetName :: ReplicaSet -> Text
+replSetName :: ReplicaSet -> SC.ByteString
 -- ^ name of connected replica set
 replSetName (ReplicaSet rsName _ _) = rsName
 
@@ -148,7 +147,7 @@ primary rs@(ReplicaSet rsName _ _) = do
     mHost <- statedPrimary <$> updateMembers rs
     case mHost of
         Just host' -> connection rs Nothing host'
-        Nothing -> throwError $ userError $ "replica set " ++ T.unpack rsName ++ " has no primary"
+        Nothing -> throwError $ userError $ "replica set " ++ SC.unpack rsName ++ " has no primary"
 
 secondaryOk :: ReplicaSet -> IO Pipe
 -- ^ Return connection to a random secondary, or primary if no secondaries available.
@@ -198,8 +197,8 @@ fetchReplicaInfo rs@(ReplicaSet rsName _ _) (host', mPipe) = do
     pipe <- connection rs mPipe host'
     info <- adminCommand ["isMaster" =: (1 :: Int)] pipe
     case B.lookup "setName" info of
-        Nothing -> throwError $ userError $ show host' ++ " not a member of any replica set, including " ++ T.unpack rsName ++ ": " ++ show info
-        Just setName | setName /= rsName -> throwError $ userError $ show host' ++ " not a member of replica set " ++ T.unpack rsName ++ ": " ++ show info
+        Nothing -> throwError $ userError $ show host' ++ " not a member of any replica set, including " ++ SC.unpack rsName ++ ": " ++ show info
+        Just setName | setName /= rsName -> throwError $ userError $ show host' ++ " not a member of replica set " ++ SC.unpack rsName ++ ": " ++ show info
         Just _ -> return (host', info)
 
 connection :: ReplicaSet -> Maybe Pipe -> Host -> IO Pipe

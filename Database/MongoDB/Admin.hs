@@ -40,13 +40,11 @@ import System.IO.Unsafe (unsafePerformIO)
 
 import qualified Data.HashTable.IO as H
 import qualified Data.Set as Set
+import qualified Data.ByteString.Char8 as SC
 
 import Control.Monad.Trans (MonadIO, liftIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Data.Bson (Document, Field(..), at, (=:), (=?), exclude, merge)
-import Data.Text (Text)
-
-import qualified Data.Text as T
 
 import Database.MongoDB.Connection (Host, showHostPort)
 import Database.MongoDB.Internal.Protocol (pwHash, pwKey)
@@ -83,7 +81,7 @@ dropCollection coll = do
     resetIndexCache
     r <- runCommand ["drop" =: coll]
     if true1 "ok" r then return True else do
-        if at "errmsg" r == ("ns not found" :: Text) then return False else
+        if at "errmsg" r == ("ns not found" :: SC.ByteString) then return False else
             fail $ "dropCollection failed: " ++ show r
 
 validateCollection :: (MonadIO m) => Collection -> Action m Document
@@ -92,7 +90,7 @@ validateCollection coll = runCommand ["validate" =: coll]
 
 -- ** Index
 
-type IndexName = Text
+type IndexName = SC.ByteString
 
 data Index = Index {
     iColl :: Collection,
@@ -116,8 +114,8 @@ index :: Collection -> Order -> Index
 index coll keys = Index coll keys (genName keys) False False Nothing
 
 genName :: Order -> IndexName
-genName keys = T.intercalate "_" (map f keys)  where
-    f (k := v) = k `T.append` "_" `T.append` T.pack (show v)
+genName keys = SC.intercalate "_" (map f keys)  where
+    f (k := v) = SC.concat [k, "_", SC.pack (show v)]
 
 ensureIndex :: (MonadIO m) => Index -> Action m ()
 -- ^ Create index if we did not already create one. May be called repeatedly with practically no performance hit, because we remember if we already called this for the same index (although this memory gets wiped out every 15 minutes, in case another client drops the index and we want to create it again).
@@ -148,7 +146,7 @@ dropIndexes :: (MonadIO m) => Collection -> Action m Document
 -- ^ Drop all indexes on this collection
 dropIndexes coll = do
     resetIndexCache
-    runCommand ["deleteIndexes" =: coll, "index" =: ("*" :: Text)]
+    runCommand ["deleteIndexes" =: coll, "index" =: ("*" :: SC.ByteString)]
 
 -- *** Index cache
 
@@ -239,7 +237,7 @@ repairDatabase db = useDb db $ runCommand ["repairDatabase" =: (1 :: Int)]
 serverBuildInfo :: (MonadIO m) => Action m Document
 serverBuildInfo = useDb admin $ runCommand ["buildinfo" =: (1 :: Int)]
 
-serverVersion :: (MonadIO m) => Action m Text
+serverVersion :: (MonadIO m) => Action m SC.ByteString
 serverVersion = at "version" `liftM` serverBuildInfo
 
 -- * Diagnostics
@@ -264,7 +262,7 @@ totalSize coll = do
     xs <- mapM isize =<< getIndexes coll
     return (foldl (+) x xs)
  where
-    isize idx = at "storageSize" `liftM` collectionStats (coll `T.append` ".$" `T.append` at "name" idx)
+    isize idx = at "storageSize" `liftM` collectionStats (coll `SC.append` ".$" `SC.append` at "name" idx)
 
 -- ** Profiling
 

@@ -20,13 +20,12 @@ import System.Random (newStdGen)
 import System.Random.Shuffle (shuffle')
 
 import qualified Data.ByteString as S
+import qualified Data.ByteString.Char8 as SC
 
 import Control.Monad.Error (MonadError(..), Error(..))
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Bson
-import Data.Text (Text)
-
-import qualified Data.Text as T
+import Data.Char (ord)
 
 #if !MIN_VERSION_network(2, 4, 1)
 deriving instance Show PortID
@@ -94,9 +93,9 @@ bitOr :: (Num a, Bits a) => [a] -> a
 -- ^ bit-or all numbers together
 bitOr = foldl (.|.) 0
 
-(<.>) :: Text -> Text -> Text
+(<.>) :: SC.ByteString -> SC.ByteString -> SC.ByteString
 -- ^ Concat first and second together with period in between. Eg. @\"hello\" \<.\> \"world\" = \"hello.world\"@
-a <.> b = T.append a (T.cons '.' b)
+a <.> b = SC.append a (SC.cons '.' b)
 
 true1 :: Label -> Document -> Bool
 -- ^ Is field's value a 1 or True (MongoDB use both Int and Bools for truth values). Error if field not in document or field not a Num or Bool.
@@ -107,10 +106,10 @@ true1 k doc = case valueAt k doc of
     Int64 n -> n == 1
     _ -> error $ "expected " ++ show k ++ " to be Num or Bool in " ++ show doc
 
-byteStringHex :: S.ByteString -> String
+byteStringHex :: SC.ByteString -> SC.ByteString
 -- ^ Hexadecimal string representation of a byte string. Each byte yields two hexadecimal characters.
-byteStringHex = concatMap byteHex . S.unpack
+byteStringHex s = SC.pack (concatMap byteHex (SC.unpack s))
 
-byteHex :: Word8 -> String
+byteHex :: Char -> String
 -- ^ Two char hexadecimal representation of byte
-byteHex b = (if b < 16 then ('0' :) else id) (showHex b "")
+byteHex b = (if (ord b) < 16 then ('0' :) else id) (showHex (ord b) "")

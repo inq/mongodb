@@ -51,16 +51,14 @@ import Control.Concurrent (ThreadId, forkIO, killThread)
 import Control.Exception.Lifted (onException, throwIO, try)
 
 import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString.Char8 as SC
 
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Bson (Document)
 import Data.Bson.Binary (getDocument, putDocument, getInt32, putInt32, getInt64,
                          putInt64, putCString)
-import Data.Text (Text)
 
 import qualified Crypto.Hash.MD5 as MD5
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as TE
 
 import Database.MongoDB.Internal.Util (bitOr, byteStringHex)
 
@@ -208,7 +206,7 @@ readMessage conn = readResp  where
         runGet getReply . L.fromStrict <$> T.read conn len
     decodeSize = subtract 4 . runGet getInt32
 
-type FullCollection = Text
+type FullCollection = SC.ByteString
 -- ^ Database name and collection name with period (.) in between. Eg. \"myDb.myCollection\"
 
 -- ** Header
@@ -432,15 +430,15 @@ rBit AwaitCapable = 3
 
 -- * Authentication
 
-type Username = Text
-type Password = Text
-type Nonce = Text
+type Username = SC.ByteString
+type Password = SC.ByteString
+type Nonce = SC.ByteString
 
-pwHash :: Username -> Password -> Text
-pwHash u p = T.pack . byteStringHex . MD5.hash . TE.encodeUtf8 $ u `T.append` ":mongo:" `T.append` p
+pwHash :: Username -> Password -> SC.ByteString
+pwHash u p = byteStringHex . MD5.hash . SC.concat $ [u, ":mongo:", p]
 
-pwKey :: Nonce -> Username -> Password -> Text
-pwKey n u p = T.pack . byteStringHex . MD5.hash . TE.encodeUtf8 . T.append n . T.append u $ pwHash u p
+pwKey :: Nonce -> Username -> Password -> SC.ByteString
+pwKey n u p = byteStringHex . MD5.hash . SC.concat $ [n, u, pwHash u p]
 
 
 {- Authors: Tony Hannan <tony@10gen.com>
